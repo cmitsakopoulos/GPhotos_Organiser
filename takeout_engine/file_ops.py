@@ -66,12 +66,38 @@ def set_file_creation_and_mtime(file_path: Path, dt: datetime) -> bool:
     return True
 
 
-def get_collision_safe_path(target_path: Path) -> Path:
+def is_identical_file(path1: Path, path2: Path) -> bool:
+    """Compares file size then SHA-256 to check if two files are identical."""
+    try:
+        if path1.stat().st_size != path2.stat().st_size:
+            return False
+        import hashlib
+        h1 = hashlib.sha256()
+        with open(path1, "rb") as f1:
+            while chunk := f1.read(65536):
+                h1.update(chunk)
+        h2 = hashlib.sha256()
+        with open(path2, "rb") as f2:
+            while chunk := f2.read(65536):
+                h2.update(chunk)
+        return h1.hexdigest() == h2.hexdigest()
+    except OSError:
+        return False
+
+
+def get_collision_safe_path(target_path: Path, source_path: Optional[Path] = None) -> Tuple[Path, bool]:
     """
-    Returns an available path by appending (1), (2), etc. before suffix if file already exists.
+    Returns (safe_path, is_identical_skip).
+    If target_path does not exist: returns (target_path, False).
+    If source_path is provided and target_path (or one of its collision numbered versions)
+    already has identical content: returns (existing_path, True).
+    Otherwise appends (1), (2), etc. and returns (new_path, False).
     """
     if not target_path.exists():
-        return target_path
+        return target_path, False
+
+    if source_path and is_identical_file(target_path, source_path):
+        return target_path, True
 
     parent = target_path.parent
     stem = target_path.stem
@@ -81,20 +107,25 @@ def get_collision_safe_path(target_path: Path) -> Path:
     while True:
         candidate = parent / f"{stem}({counter}){suffix}"
         if not candidate.exists():
-            return candidate
+            return candidate, False
+        if source_path and is_identical_file(candidate, source_path):
+            return candidate, True
         counter += 1
 
 
 def create_windows_shortcut(target_path: Path, destination_dir: Path) -> Optional[Path]:
     """
-    Creates a Windows .lnk shortcut pointing to target_path (relative).
+    Creates a Windows .lnk shortcut pointing to target_path (absolute).
     """
     destination_dir.mkdir(parents=True, exist_ok=True)
     shortcut_name = f"{target_path.name}.lnk"
-    shortcut_path = get_collision_safe_path(destination_dir / shortcut_name)
+    shortcut_path, _ = get_collision_safe_path(destination_dir / shortcut_name)
+
+    abs_target = str(target_path.resolve()).replace("'", "''")
+    work_dir = str(target_path.parent.resolve()).replace("'", "''")
+    safe_shortcut = str(shortcut_path.resolve()).replace("'", "''")
 
     try:
-        rel_target = os.path.relpath(target_path, destination_dir)
         cmd = [
             "powershell.exe",
             "-NoLogo",
@@ -102,8 +133,9 @@ def create_windows_shortcut(target_path: Path, destination_dir: Path) -> Optiona
             "-NonInteractive",
             "-Command",
             f"$ws = New-Object -ComObject WScript.Shell; "
-            f"$s = $ws.CreateShortcut('{shortcut_path}'); "
-            f"$s.TargetPath = '{rel_target}'; "
+            f"$s = $ws.CreateShortcut('{safe_shortcut}'); "
+            f"$s.TargetPath = '{abs_target}'; "
+            f"$s.WorkingDirectory = '{work_dir}'; "
             f"$s.Save()"
         ]
         res = subprocess.run(cmd, capture_output=True, text=True)
@@ -114,7 +146,80 @@ def create_windows_shortcut(target_path: Path, destination_dir: Path) -> Optiona
 
     # Fallback to symbolic link if shortcut fails
     try:
-        shortcut_path.symlink_to(target_path)
+        shortcut_path.symlink_to(target_path.resolve())
         return shortcut_path
     except Exception:
         return None
+
+
+def prune_empty_directories(root_dir: Path) -> int:
+    """
+    Recursively removes empty directories within root_dir (bottom-up).
+    Does not remove root_dir itself.
+    Returns count of removed directories.
+    """
+    if not root_dir.is_dir():
+        return 0
+
+    removed = 0
+    for root_str, dirs, files in os.walk(str(root_dir), topdown=False):
+        current = Path(root_str)
+        if current == root_dir:
+            continue
+        try:
+            if not any(current.iterdir()):
+                current.rmdir()
+                removed += 1
+        except OSError:
+            pass
+
+    return removed
+
+
+def archive_or_delete_residuals(
+    input_dir: Path,
+    output_dir: Path,
+    archive_zip: bool = True
+) -> Tuple[int, Optional[Path]]:
+    """
+    Discovers all leftover .json sidecars in input_dir.
+    Optionally compresses them into output_dir / 'takeout_metadata_archive.zip'.
+    Then deletes the individual json sidecar files from input_dir.
+    Returns (count_of_cleaned_files, archive_zip_path_or_None).
+    """
+    if not input_dir.is_dir():
+        return 0, None
+
+    json_files = []
+    for root_str, dirs, files in os.walk(str(input_dir)):
+        root = Path(root_str)
+        for f in files:
+            if f.lower().endswith(".json"):
+                json_files.append(root / f)
+
+    if not json_files:
+        return 0, None
+
+    zip_path = None
+    if archive_zip:
+        import zipfile
+        output_dir.mkdir(parents=True, exist_ok=True)
+        zip_path = output_dir / "takeout_metadata_archive.zip"
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for jf in json_files:
+                try:
+                    rel = jf.relative_to(input_dir)
+                except ValueError:
+                    rel = jf.name
+                zf.write(jf, arcname=str(rel))
+
+    cleaned_count = 0
+    for jf in json_files:
+        try:
+            jf.unlink(missing_ok=True)
+            cleaned_count += 1
+        except OSError:
+            pass
+
+    return cleaned_count, zip_path
+

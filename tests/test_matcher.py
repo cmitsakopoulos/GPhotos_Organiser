@@ -88,3 +88,24 @@ def test_find_json_heuristics():
         found, reason = find_json_for_media(photo_num)
         assert found == json_base_num
         assert reason == "digit_removed"
+
+        # 7. Supplemental metadata exact match (Google Takeout 2026 format)
+        photo_supp = tmp / "PXL_20260914_140111136.jpg"
+        photo_supp.touch()
+        json_supp = tmp / "PXL_20260914_140111136.jpg.supplemental-metadata.json"
+        json_supp.touch()
+
+        found, reason = find_json_for_media(photo_supp)
+        assert found == json_supp
+        assert reason == "exact"
+
+        # 8. Supplemental metadata duplicate bracket swap: photo(1).jpg -> photo.jpg.supplemental-metadata(1).json
+        photo_supp_dup = tmp / "Scan 4(1).png"
+        photo_supp_dup.touch()
+        json_supp_dup = tmp / "Scan 4.png.supplemental-metadata(1).json"
+        json_supp_dup.touch()
+
+        found, reason = find_json_for_media(photo_supp_dup)
+        assert found == json_supp_dup
+        assert reason == "bracket_swap"
+

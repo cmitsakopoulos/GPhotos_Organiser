@@ -75,3 +75,36 @@ def test_organizer_dry_run_and_execution():
         assert organized_dir.exists()
         assert (organized_dir / "beach.jpg").exists()
         assert (organized_dir / long_name).exists()
+
+
+def test_organizer_dry_run_loud():
+    import zipfile
+
+    with tempfile.TemporaryDirectory() as in_tmp, tempfile.TemporaryDirectory() as out_tmp:
+        in_dir = Path(in_tmp)
+        out_dir = Path(out_tmp)
+
+        # Create a zip archive with photo and sidecar
+        z_path = in_dir / "takeout-2026-001.zip"
+        with zipfile.ZipFile(z_path, "w") as zf:
+            zf.writestr("Takeout/Google Photos/Photos from 2026/img1.jpg", "image_data_loud")
+            zf.writestr(
+                "Takeout/Google Photos/Photos from 2026/img1.jpg.json",
+                json.dumps({"photoTakenTime": {"timestamp": "1773750000"}})
+            )
+
+        organizer = TakeoutOrganizer(
+            input_dir=in_dir,
+            output_dir=out_dir,
+            divide_to_dates=True,
+            copy_files=False,
+            dry_run_loud=True,
+            verbose=True  # quiet progress in test
+        )
+        organizer.run()
+
+        # Output folder must remain clean (0 bytes written)
+        assert not (out_dir / "ALL_PHOTOS").exists()
+        assert organizer.stats.total_media_found == 1
+        assert organizer.stats.date_sources["json"] == 1
+        assert len(organizer.planned_actions) == 1

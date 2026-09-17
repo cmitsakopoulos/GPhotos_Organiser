@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "takeout-organizer"
+version = "1.0.0"
+description = "A fast, automated Google Photos Takeout library organizer with metadata restoration and deduplication."
+authors = [{ name = "cmitsakopoulos" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pillow>=10.0.0",
+    "tqdm>=4.60.0",
+    "colorama>=0.4.6",
+]
+
+[project.scripts]
+takeout-organizer = "takeout_engine.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["takeout_engine*"]

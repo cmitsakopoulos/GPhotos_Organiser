@@ -1,0 +1,76 @@
+# Google Photos Takeout Organizer
+
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
+[![EXIF Supported](https://img.shields.io/badge/EXIF-GPS%20%2B%20Dates-success.svg)]()
+[![Deduplication](https://img.shields.io/badge/Dedup-Two--Stage%20SHA256-orange.svg)]()
+
+A fast, robust CLI to organize Google Photos Takeout archives into a clean, chronological library with embedded EXIF metadata and deduplication.
+
+---
+
+## Features
+
+- **Direct Zip Archive Extraction**: Works directly on `.zip` downloads and multi-part archives (`takeout-*-001.zip` .. `007.zip`) with animated progress bars.
+- **Smart Sidecar Matching**: Resolves 51-character truncations, bracket duplicate swaps (`photo(1).jpg`), and modern `.supplemental-metadata.json` sidecars with up to **100% match rate**.
+- **EXIF & GPS Injection**: Automatically embeds original capture dates, descriptions, and GPS coordinates directly into image headers (JPEG, WebP, TIFF).
+- **Two-Stage Deduplication**: Detects identical photos appearing in both yearly timelines and custom albums, saving disk space while generating native Windows `.lnk` shortcuts for albums.
+- **Zero-Disk Dry Run (`--dry-run-loud`)**: In-memory simulation of the entire process with animated loading bars and throughput metrics without writing a single byte to disk.
+- **Terminal UI**: Clean color themes, status badges, and diagnostic summaries.
+
+---
+
+## Installation
+
+Install locally in editable mode:
+
+```bash
+pip install -e .
+```
+
+Now the `takeout-organizer` command will be available globally in your terminal!
+
+---
+
+## Usage
+
+### 1. Test Preview (Animated Progress Bars, Zero Disk Writes)
+```bash
+takeout-organizer -i "C:\Users\You\Downloads" -o "C:\Users\You\Desktop\Photos" --dry-run-loud
+```
+
+### 2. Full Run (Organize + EXIF + Chronological Folders)
+```bash
+takeout-organizer -i "C:\Users\You\Downloads" -o "C:\Users\You\Desktop\Photos"
+```
+
+### 3. Pure Chronology (Skip Album Shortcuts)
+```bash
+takeout-organizer -i "C:\Users\You\Downloads" -o "C:\Users\You\Desktop\Photos" --albums ignore
+```
+
+### 4. Standalone Extraction (Unpack Only)
+```bash
+takeout-organizer --extract-only -i "C:\Users\You\Downloads" -o "C:\Users\You\Desktop\Extracted"
+```
+
+---
+
+## CLI Options
+
+| Flag | Description | Default |
+| :--- | :--- | :--- |
+| `-i, --input` | Input folder or specific Takeout `.zip` archive | *Required* |
+| `-o, --output` | Target directory for organized library | *Required* |
+| `--dry-run-loud` | Animated simulation with loading bars without writing to disk | `False` |
+| `--dry-run` | Silent preview with diagnostic report | `False` |
+| `--albums` | Album strategy: `shortcut`, `copy`, `json`, or `ignore` | `shortcut` |
+| `--delete-zips` | Delete original source `.zip` archives after successful run | `False` |
+| `--copy` | Copy files instead of moving (keeps input intact) | `False` |
+| `--no-color` | Disable ANSI terminal colors | `False` |
+| `-v, --verbose` | Verbose debug output | `False` |
+
+---
+
+## License
+MIT License. Created for personal photo archival.

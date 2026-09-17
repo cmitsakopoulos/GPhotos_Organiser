@@ -31,15 +31,8 @@ class MediaMetadata:
     description: Optional[str] = None
 
 
-def extract_from_json(json_path: Path) -> Optional[MediaMetadata]:
-    """Parses timestamps, GPS, and description from a Google Takeout JSON sidecar."""
-    try:
-        with open(json_path, "r", encoding="utf-8", errors="replace") as f:
-            data = json.load(f)
-    except Exception as e:
-        logger.debug(f"Failed to read JSON {json_path}: {e}")
-        return None
-
+def extract_from_json_data(data: dict, json_path: Optional[Path] = None) -> Optional[MediaMetadata]:
+    """Parses timestamps, GPS, and description from a Google Takeout JSON dictionary."""
     meta = MediaMetadata(json_path=json_path, date_source="json")
 
     # 1. Parse timestamp: photoTakenTime > creationTime
@@ -78,6 +71,18 @@ def extract_from_json(json_path: Path) -> Optional[MediaMetadata]:
     return meta
 
 
+def extract_from_json(json_path: Path) -> Optional[MediaMetadata]:
+    """Parses timestamps, GPS, and description from a Google Takeout JSON sidecar."""
+    try:
+        with open(json_path, "r", encoding="utf-8", errors="replace") as f:
+            data = json.load(f)
+    except Exception as e:
+        logger.debug(f"Failed to read JSON {json_path}: {e}")
+        return None
+
+    return extract_from_json_data(data, json_path=json_path)
+
+
 def extract_from_exif(media_path: Path) -> Optional[datetime]:
     """Extracts date from embedded EXIF headers in supported image formats."""
     if media_path.suffix.lower() not in PHOTO_EXTENSIONS:
@@ -106,6 +111,18 @@ def extract_from_exif(media_path: Path) -> Optional[datetime]:
                         continue
     except Exception as e:
         logger.debug(f"Could not read EXIF from {media_path}: {e}")
+
+    # Fallback: scan binary header for standard EXIF datetime string (supports RAW files like .ARW, .CR2, .NEF, .DNG)
+    try:
+        with open(media_path, "rb") as f:
+            header = f.read(131072)
+            import re
+            m = re.search(rb'((?:20|19)\d{2}:[01]\d:[0-3]\d [0-2]\d:[0-5]\d:[0-5]\d)', header)
+            if m:
+                dt_str = m.group(1).decode("ascii")
+                return datetime.strptime(dt_str, "%Y:%m:%d %H:%M:%S")
+    except Exception:
+        pass
 
     return None
 
@@ -141,6 +158,17 @@ def guess_from_filename(filename: str) -> Optional[datetime]:
     return None
 
 
+def extract_from_folder_year(folder_name: str) -> Optional[datetime]:
+    """Fallback: extract year datetime from folder name like 'Photos from 2021'."""
+    if is_year_folder(folder_name):
+        import re
+        m_year = re.search(r"\b(18|19|20)\d{2}\b", folder_name)
+        if m_year:
+            year_int = int(m_year.group(0))
+            return datetime(year_int, 1, 1, 12, 0, 0)
+    return None
+
+
 def extract_media_metadata(
     media_path: Path,
     folder_title_index: Optional[Dict[str, Path]] = None,
@@ -173,15 +201,8 @@ def extract_media_metadata(
             return MediaMetadata(date_taken=guessed_date, date_source="filename_guess")
 
     # 4. Folder name fallback (e.g. "Photos from 2021", "Fotos von 2021")
-    parent_name = media_path.parent.name
-    if is_year_folder(parent_name):
-        import re
-        m_year = re.search(r"\b(18|19|20)\d{2}\b", parent_name)
-        if m_year:
-            year_int = int(m_year.group(0))
-            return MediaMetadata(
-                date_taken=datetime(year_int, 1, 1, 12, 0, 0),
-                date_source="folder_guess"
-            )
+    folder_date = extract_from_folder_year(media_path.parent.name)
+    if folder_date:
+        return MediaMetadata(date_taken=folder_date, date_source="folder_guess")
 
     return MediaMetadata(date_taken=None, date_source="none")

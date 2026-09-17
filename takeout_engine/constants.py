@@ -55,8 +55,9 @@ FILENAME_DATETIME_PATTERNS: List[Tuple[re.Pattern, str]] = [
     # signal-2020-10-26-163832.jpg
     (re.compile(r'signal-((?:20|19|18)\d{2}-(?:0[1-9]|1[0-2])-(?:[0-2]\d|3[01])-\d{6})', re.IGNORECASE), "%Y-%m-%d-%H%M%S"),
     
-    # WhatsApp Image 2020-10-26 at 16.38.32.jpeg
+    # WhatsApp Image 2020-10-26 at 16.38.32.jpeg or IMG-20240712-WA0000.jpg
     (re.compile(r'WhatsApp Image ((?:20|19|18)\d{2}-(?:0[1-9]|1[0-2])-(?:[0-2]\d|3[01])) at (\d{2}\.\d{2}\.\d{2})', re.IGNORECASE), None),
+    (re.compile(r'(?:IMG|VID)-((?:20|19|18)\d{2}(?:0[1-9]|1[0-2])(?:[0-2]\d|3[01]))-WA\d+', re.IGNORECASE), "%Y%m%d"),
 
     # 2016_01_30_11_49_15.mp4
     (re.compile(r'((?:20|19|18)\d{2}_(?:0[1-9]|1[0-2])_(?:[0-2]\d|3[01])_\d{2}_\d{2}_\d{2})'), "%Y_%m_%d_%H_%M_%S"),

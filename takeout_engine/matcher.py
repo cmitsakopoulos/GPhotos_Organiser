@@ -76,14 +76,15 @@ def find_json_for_media(
     filename = media_path.name
     stem = media_path.stem
 
-    # Helper to test file existence
+    # Helper to test file existence across supplemental-metadata and standard JSON suffixes
     def check(candidate_name: str, reason: str) -> Optional[Tuple[Path, str]]:
-        p = parent_dir / f"{candidate_name}.json"
-        if p.is_file():
-            return p, reason
+        for ext in (".supplemental-metadata.json", ".json"):
+            p = parent_dir / f"{candidate_name}{ext}"
+            if p.is_file():
+                return p, reason
         return None
 
-    # 1. Exact match: "photo.jpg.json"
+    # 1. Exact match: "photo.jpg.supplemental-metadata.json" or "photo.jpg.json"
     res = check(filename, "exact")
     if res:
         return res
@@ -102,7 +103,24 @@ def find_json_for_media(
                 return res
 
     # 3. Bracket swap for numbered duplicates:
-    # 'image(1).jpg' -> 'image.jpg(1).json'
+    # Supplemental: 'image(1).jpg' -> 'image.jpg.supplemental-metadata(1).json'
+    # Traditional:   'image(1).jpg' -> 'image.jpg(1).json'
+    matches = list(re.finditer(r'\(\d+\)\.', filename))
+    if matches:
+        last_match = matches[-1]
+        bracket = filename[last_match.start():last_match.end() - 1]  # '(1)'
+        without_bracket = filename[:last_match.start()] + filename[last_match.end() - 1:]
+
+        # Check 'image.jpg.supplemental-metadata(1).json'
+        p_supp_bracket = parent_dir / f"{without_bracket}.supplemental-metadata{bracket}.json"
+        if p_supp_bracket.is_file():
+            return p_supp_bracket, "bracket_swap"
+
+        # Check 'image.jpg(1).json'
+        p_trad_bracket = parent_dir / f"{without_bracket}{bracket}.json"
+        if p_trad_bracket.is_file():
+            return p_trad_bracket, "bracket_swap"
+
     swapped = bracket_swap_candidate(filename)
     if swapped:
         res = check(swapped, "bracket_swap")

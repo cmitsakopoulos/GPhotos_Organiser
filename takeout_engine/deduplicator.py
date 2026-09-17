@@ -88,12 +88,15 @@ def deduplicate_and_group_albums(media_items: List[DiscoveredMedia]) -> Deduplic
         # 2. Files with identical size -> group by partial hash
         by_partial: Dict[str, List[DiscoveredMedia]] = {}
         for item in size_group:
-            try:
-                p_hash = compute_partial_hash(item.file_path)
-                by_partial.setdefault(p_hash, []).append(item)
-            except OSError:
-                # File access error, keep as is
-                unique_items.append(item)
+            if item.full_hash:
+                by_partial.setdefault(item.full_hash[:16], []).append(item)
+            else:
+                try:
+                    p_hash = compute_partial_hash(item.file_path)
+                    by_partial.setdefault(p_hash, []).append(item)
+                except OSError:
+                    # File access error, keep as is
+                    unique_items.append(item)
 
         for p_hash, partial_group in by_partial.items():
             if len(partial_group) == 1:
@@ -107,12 +110,15 @@ def deduplicate_and_group_albums(media_items: List[DiscoveredMedia]) -> Deduplic
             # 3. Identical partial hash -> compute full hash
             by_full: Dict[str, List[DiscoveredMedia]] = {}
             for item in partial_group:
-                try:
-                    f_hash = compute_full_hash(item.file_path)
-                    item.full_hash = f_hash
-                    by_full.setdefault(f_hash, []).append(item)
-                except OSError:
-                    unique_items.append(item)
+                if item.full_hash:
+                    by_full.setdefault(item.full_hash, []).append(item)
+                else:
+                    try:
+                        f_hash = compute_full_hash(item.file_path)
+                        item.full_hash = f_hash
+                        by_full.setdefault(f_hash, []).append(item)
+                    except OSError:
+                        unique_items.append(item)
 
             for f_hash, hash_group in by_full.items():
                 if len(hash_group) == 1:
